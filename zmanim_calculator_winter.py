@@ -14,6 +14,8 @@ SOF_ZMAN_TEFILLA = "סז\"ת"
 MINCHA1 = "מנחה א"
 MINCHA2 = "מנחה ב"
 MAARIV_MOTZEI = "מעריב ומוצאי שבת"
+MINCHA_MAARIV = "מנחה ומעריב"
+MAARIV = "מעריב"
 
 
 def rosh_chodesh_name(j: JewishCalendar) -> str:
@@ -46,18 +48,36 @@ def get_upcoming_significant_days(date: date) -> List[Dict[str, str]]:
     return significant_days
 
 
-def round_time_up(dt: datetime):
+def round_time_up(dt: datetime) -> datetime:
     dt += timedelta(minutes=5 - dt.minute % 5)
     return dt
 
 
-def round_time_down(dt: datetime):
+def round_time_down(dt: datetime) -> datetime:
     dt -= timedelta(minutes=dt.minute % 5)
     return dt
 
 
-def is_tachanun(date: date) -> bool:
-    """Check if tachanun is said on <date>."""
+def round_time_nearest(dt: datetime) -> datetime:
+    if round(dt.minute / 5) * 5 > dt.minute:
+        return round_time_up(dt)
+    else:
+        return round_time_down(dt)
+
+
+def is_chol_longer_services(date: date) -> bool:
+    """Check if there are longer services on this chol day (Hallel, Musaf,
+    Torah reading).
+
+    Precondition:
+        - <date> is a chol date (melacha is permitted), not including Purim, Tisha B'av,
+        Aseres Yemei Teshuva, and days on which selichos are said
+        (all these have their own functions)
+    """
+    j = JewishCalendar(date)
+    return j.significant_day() in ["chol_hamoed_succos", "hoshana_rabbah", "chanukah",
+                                   "tenth_of_teves", "taanis_esther", "chol_hamoed_pesach",
+                                   "seventeen_of_tammuz"] or j.is_rosh_chodesh()
 
 
 def is_significant_day(date: date) -> bool:
@@ -66,25 +86,21 @@ def is_significant_day(date: date) -> bool:
     return j.significant_day() is not None
 
 
-def get_zmanim_erev_shabbos(date: date) -> List[Dict[str, str]]:
+def get_zmanim_erev_shabbos(date: date) -> Dict[str, str]:
     """Return all zmanim on erev shabbos <day>.
 
     Precondition:
         - <day> is an erev shabbos
     """
-    zmanim = []
+    zmanim = {}
     zmanim_calendar = ZmanimCalendar(geo_location=GEO_LOCATION, date=date)
     if is_significant_day(date):
-        zmanim.append(format_zman(SHACHARIS, time(7, 0)))
+        add_zman(zmanim, SHACHARIS, time(7, 0))
     else:
-        zmanim.append(format_zman(SHACHARIS, time(7, 15)))
-    zmanim.append(format_zman(CANDLE_LIGHTING, zmanim_calendar.candle_lighting()))
-    zmanim.append(format_zman(MINCHA_KAB_SHAB, round_time_up(zmanim_calendar.candle_lighting())))
+        add_zman(zmanim, SHACHARIS, time(7, 15))
+    add_zman(zmanim, CANDLE_LIGHTING, zmanim_calendar.candle_lighting())
+    add_zman(zmanim, MINCHA_KAB_SHAB, round_time_up(zmanim_calendar.candle_lighting()))
     return zmanim
-
-
-def add_zman(zmanim: Dict[str, str], name: str, zman: Union[datetime, time]):
-    zmanim[name] = zman.strftime("%H:%M")
 
 
 def get_zmanim_assur_bemelacha(date: date) -> Dict[str, str]:
@@ -100,24 +116,62 @@ def get_zmanim_assur_bemelacha(date: date) -> Dict[str, str]:
 
 
 def get_zmanim_shabbos(date: date) -> Dict[str, str]:
-    zmanim = []
-    zmanim.append({"פרשת השבוע": parshios.getparsha_string(dates.GregorianDate(date.year, date.month, date.day), hebrew=True)})
-    zmanim.extend(get_zmanim_assur_bemelacha(date))
+    parsha = {"פרשת השבוע": parshios.getparsha_string(
+        dates.GregorianDate(date.year, date.month, date.day), hebrew=True)}
+    return parsha | get_zmanim_assur_bemelacha(date)
+
+
+def get_zmanim_sunday(date: date) -> Dict[str, str]:
+    zmanim = {}
+    zmanim_calendar = ZmanimCalendar(geo_location=GEO_LOCATION, date=date)
+    add_zman(zmanim, SHACHARIS, time(9, 00))
+    add_zman(zmanim, MINCHA_MAARIV, round_time_nearest(zmanim_calendar.shkia() - timedelta(minutes=10)))
+    add_zman(zmanim, MAARIV, time(19, 0))
     return zmanim
 
 
-def get_zmanim_sunday(date: date) -> List[Dict[str, str]]:
+def is_kodesh_or_misc(date: date):
+    """Check if weekday corresponds to:
+        (A) kodesh: shalosh regalim, shemini atzeres/simchas torah,
+        rosh hashana, yom kippur
+        (B) misc: tisha b'av, tzom gedalia, selichos, aseres yemei teshuva, or
+            erev kodesh
+
+    Precondition:
+        - <date> is a weekday
+    """
+    j = JewishCalendar(date)
+    is_kodesh = j.significant_day() in ['pesach', 'succos', 'shavuos',
+                                        'shemini_atzeres', 'simchas_torah',
+                                        'rosh_hashana', 'yom kippur']
+    is_misc = j.significant_day() in []
+    return is_kodesh or is_misc
+
+
+def redirect_kodesh_or_misc(date: date) -> Dict[str, str]:
     pass
 
 
-def get_zmanim_weekday(date: date) -> List[Dict[str, str]]:
-    pass
+def get_zmanim_weekday(date: date) -> Dict[str, str]:
+    zmanim = {}
+    if is_chol_longer_services(date):
+        add_zman(zmanim, SHACHARIS, time(7, 00))
+    elif is_kodesh_or_misc(date):
+        return redirect_kodesh_or_misc(date)
+    else:
+        add_zman(zmanim, SHACHARIS, time(7, 15))
+    add_zman(zmanim, MAARIV, time(19, 00))
 
 
 def get_zmanim_significant_day(date: date) -> List[Dict[str, str]]:
     pass
 
 
+def add_zman(zmanim: Dict[str, str], name: str, zman: Union[datetime, time]):
+    zmanim[name] = zman.strftime("%H:%M")
+
+
 if __name__ == '__main__':
     print(get_zmanim_shabbos(date(2022, 3, 5)))
     print(get_upcoming_significant_days(date(2022, 3, 3)))
+    print(get_zmanim_sunday(date(2022, 2, 27)))
