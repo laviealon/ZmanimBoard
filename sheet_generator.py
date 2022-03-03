@@ -1,6 +1,7 @@
 from typing import Dict
 from datetime import date, timedelta
 import zmanim_calculator_winter as zc
+from docx import Document
 
 DAY = "יום "
 SUNDAY = "א\'"
@@ -70,4 +71,10 @@ def get_week_zmanim_start_sunday(date: date) -> Dict[str, Dict[str, str]]:
 
 
 if __name__ == '__main__':
-    print(get_week_zmanim_start_sunday(date(2022, 2, 27)))
+    # print(get_week_zmanim_start_sunday(date(2022, 2, 27)))
+    document = Document('luach.docx')
+    table = document.tables
+    print(table[0].rows[10].cells[0].text)
+    for i in range(len(document.paragraphs)):
+        print(document.paragraphs[i].text, i)
+
