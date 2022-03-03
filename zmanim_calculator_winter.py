@@ -80,8 +80,31 @@ def is_chol_longer_services(date: date) -> bool:
                                    "seventeen_of_tammuz"] or j.is_rosh_chodesh()
 
 
+def is_kodesh_or_misc(date: date):
+    """Check if weekday corresponds to:
+        (A) kodesh: shalosh regalim, shemini atzeres/simchas torah,
+        rosh hashana, yom kippur
+        (B) misc: tisha b'av, purim, tzom gedalia, selichos,
+        aseres yemei teshuva, or erev kodesh
+
+    Precondition:
+        - <date> is a weekday
+    """
+    j = JewishCalendar(date)
+    is_kodesh = j.significant_day() in ['pesach', 'succos', 'shavuos',
+                                        'shemini_atzeres', 'simchas_torah',
+                                        'rosh_hashana', 'yom kippur']
+    is_misc = j.significant_day() in ['purim']
+    return is_kodesh or is_misc
+
+
+def is_altered_services(date: date):
+    """Return if weekday corresponds to altered services."""
+    return is_chol_longer_services(date) or is_kodesh_or_misc(date)
+
+
 def is_significant_day(date: date) -> bool:
-    """Check if <date> marks a Jewish holiday (making services differ)."""
+    """Check if <date> marks a Jewish significant day of any kind."""
     j = JewishCalendar(date)
     return j.significant_day() is not None
 
@@ -130,24 +153,6 @@ def get_zmanim_sunday(date: date) -> Dict[str, str]:
     return zmanim
 
 
-def is_kodesh_or_misc(date: date):
-    """Check if weekday corresponds to:
-        (A) kodesh: shalosh regalim, shemini atzeres/simchas torah,
-        rosh hashana, yom kippur
-        (B) misc: tisha b'av, tzom gedalia, selichos, aseres yemei teshuva, or
-            erev kodesh
-
-    Precondition:
-        - <date> is a weekday
-    """
-    j = JewishCalendar(date)
-    is_kodesh = j.significant_day() in ['pesach', 'succos', 'shavuos',
-                                        'shemini_atzeres', 'simchas_torah',
-                                        'rosh_hashana', 'yom kippur']
-    is_misc = j.significant_day() in []
-    return is_kodesh or is_misc
-
-
 def redirect_kodesh_or_misc(date: date) -> Dict[str, str]:
     pass
 
@@ -161,6 +166,7 @@ def get_zmanim_weekday(date: date) -> Dict[str, str]:
     else:
         add_zman(zmanim, SHACHARIS, time(7, 15))
     add_zman(zmanim, MAARIV, time(19, 00))
+    return zmanim
 
 
 def get_zmanim_significant_day(date: date) -> List[Dict[str, str]]:
